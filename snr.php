@@ -29,7 +29,6 @@ $headers = array('Content-Type' => 'application/json', 'Auth-Token' => $token);
 $zones = getAllZones($resty, $headers); 
 
 // now for each zone we have, get it's individual resource. 
-// Because Dyn's API is stupid. 
 
 foreach($zones AS $zone => $zone_uri) {
 	
@@ -74,9 +73,7 @@ foreach($zones AS $zone => $zone_uri) {
 function publish($resty, $headers, $zone) {
     $encoded = json_encode(array('publish' => true)); 
     $response = $resty->put("/REST/Zone/$zone/", $encoded, $headers); 
-    
-    // just for testing purposes;
-    
+        
     return true; 
     
 }
