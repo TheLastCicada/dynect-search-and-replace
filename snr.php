@@ -62,6 +62,14 @@ foreach($zones AS $zone => $zone_uri) {
 
 }
 
+
+/**
+ * This should publish any changes we've made while the script is running. 
+ * 
+ * @param type $resty
+ * @param type $headers
+ * @param type $zone
+ */
 function publish($resty, $headers, $zone) {
     $encoded = json_encode(array('publish' => true)); 
     $response = $resty->put($zone, $encoded, $headers); 
@@ -69,6 +77,15 @@ function publish($resty, $headers, $zone) {
     die;
 }
 
+/**
+ * This assumes we're just changing the rdata of whatever zone we've been passed.
+ * It's not the nicest thing in the world, but neither is this API
+ * 
+ * @param type $resty
+ * @param type $headers
+ * @param type $record
+ * @return boolean
+ */
 function changeRecord($resty, $headers, $record) {
     echo "\tGoing to change the IP of $record to " . NEW_IP . "\n"; 
     $querydata = array ('rdata' => NEW_IP, 'ttl' => 0); 
@@ -84,6 +101,16 @@ function changeRecord($resty, $headers, $record) {
     }
 }
 
+
+/**
+ * Gets an individual A record, so we have information to mess with. 
+ * 
+ * 
+ * @param type $resty
+ * @param type $headers
+ * @param type $id
+ * @return boolean
+ */
 function getOneARecord($resty, $headers, $id) {
         $response = $resty->get("$id", "", $headers); 
         if($response['status'] == "200") {
@@ -110,15 +137,15 @@ function getARecords($resty, $headers, $zone) {
 }
 
 
-function getOneZone($zone_uri, $resty, $headers)
-{
-	echo "Getting information on $zone_uri\n";
-	$response = $resty->get($zone_uri, "", $headers); 
-	print_r($response); 
-	die;  
-}
-
-// get a list of zones
+/**
+ * Gets all the zones we have at Dynect. Since we have several thousand, this takes a while
+ * in testing it looks like 10 seconds, so we're telling the script to wait 10 seconds
+ * so that we can go get the result of the job it just finished.
+ * 
+ * @param type $resty
+ * @param type $headers
+ * @return type
+ */
 function getAllZones($resty, $headers) {
 	$zone_response = $resty->get('/REST/Zone/', "", $headers); 
 
@@ -137,12 +164,8 @@ function getAllZones($resty, $headers) {
 
 	$zones = $zone_list->data; 
 	
-	#print_r($zone_list); 
 
 	return $zones; 
-	#foreach($zones AS $zone => $name) {
-	#	echo $name . "\n"; 
-	#}
 
 
 }
