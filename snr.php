@@ -1,81 +1,71 @@
 <?php
 
-require_once './Resty.php'; 
+require_once './Resty.php';
 
 
-define('OLD_IP', "198.101.164.14"); 
-define('NEW_IP', "166.78.72.173"); 
+define('OLD_IP', "198.101.164.14");
+define('NEW_IP', "166.78.72.173");
 
-require_once 'config.php'; 
+require_once 'config.php';
 
 
-$headers = array('Content-Type' => 'application/json'); 
+$headers = array('Content-Type' => 'application/json');
 
 $resty = new Resty();
 $resty->debug(false);
 
 $resty->setBaseURL('https://api2.dynect.net');
 
-$resp = $resty->post("/REST/Session",json_encode($login_credentials), $headers); 
+$resp = $resty->post("/REST/Session", json_encode($login_credentials), $headers);
 
 
 
 $obj = $resp['body'];
-$token = $obj->data->token; 
-$headers = array('Content-Type' => 'application/json', 'Auth-Token' => $token); 
+$token = $obj->data->token;
+$headers = array('Content-Type' => 'application/json', 'Auth-Token' => $token);
+
 
 
 // first get a list of all the zones
-$zones = getAllZones($resty, $headers); 
+$zones = getAllZones($resty, $headers);
 
 // now for each zone we have, get it's individual resource. 
 
-foreach($zones AS $zone => $zone_uri) {
-	
-            
+foreach ($zones AS $zone => $zone_uri) {
+
+
 //        
 //  since the zone_uri is returned in this format /REST/Zone/domain.com/ 
 //  we can take the basename(/REST/Zone/domain.com/); 
 //  and use that. That's going to be the zone name
 //	 
-	 $zone_name = basename($zone_uri);  
-	 # then get all the records of this zone name
-	 $a_records = getARecords($resty, $headers, $zone_name); 	
-        
-         foreach($a_records AS $num => $record) {
-             $data = getOneARecord($resty, $headers, $record); 
-             if($data) {
-                $fqdn = $data->fqdn; 
+    $zone_name = basename($zone_uri);
+
+    $nodes = getNodes($resty, $headers, $zone_name);
+
+    // now go through every node, and get it's A record id. 
+    foreach ($nodes AS $nid => $fqdn) {
+        # then get all the records of this zone, 
+        $a_records = getARecords($resty, $headers, $zone_name, $fqdn);
+
+        foreach ($a_records AS $num => $record) {
+            $data = getOneARecord($resty, $headers, $record);
+            if ($data) {
+                $fqdn = $data->fqdn;
                 $value = $data->rdata->address;
-                
+
                 // if OLD_IP is the value of rdata, then we go make the change
-                if(OLD_IP == $value) {
-                    $record_id = $data->record_id; 
-                    echo "$fqdn record $record_id has a value of $value\n";
-                    $changed = changeRecord($resty, $headers, $record); 
-                    if($changed) {
-                        publish($resty, $headers, $zone_name); 
+                if (OLD_IP == $value) {
+                    $record_id = $data->record_id;
+                    echo "\s$fqdn record $record_id has a value of $value (MATCH FOUND)\n";
+                    $changed = changeRecord($resty, $headers, $record);
+                    if ($changed) {
+                        publish($resty, $headers, $zone_name);
                     }
                 }
-             }
-         }
-
-}
-
-
-/**
- * This should publish any changes we've made while the script is running. 
- * 
- * @param type $resty
- * @param type $headers
- * @param type $zone
- */
-function publish($resty, $headers, $zone) {
-    $encoded = json_encode(array('publish' => true)); 
-    $response = $resty->put("/REST/Zone/$zone/", $encoded, $headers); 
-        
-    return true; 
-    
+            }
+        }
+    }
 }
 
 /**
@@ -88,26 +78,25 @@ function publish($resty, $headers, $zone) {
  * @return boolean
  */
 function changeRecord($resty, $headers, $record) {
-    echo "\tGoing to change the IP of $record to " . NEW_IP . "\n"; 
-    
+    echo "\tGoing to change the IP of $record to " . NEW_IP . "\n";
+
     $data = Array();
 
     $data['rdata'] = Array();
     $data['rdata']['address'] = NEW_IP;
-    $querydata = json_encode($data); 
-    
+    $querydata = json_encode($data);
 
-    
+
+
     $response = $resty->put($record, $querydata, $headers);
 
 
-    if($response['status'] == "200") {
-        return true; 
+    if ($response['status'] == "200") {
+        return true;
     } else {
-        return false; 
+        return false;
     }
 }
-
 
 /**
  * Gets an individual A record, so we have information to mess with. 
@@ -119,13 +108,13 @@ function changeRecord($resty, $headers, $record) {
  * @return boolean
  */
 function getOneARecord($resty, $headers, $id) {
-        $response = $resty->get("$id", "", $headers); 
-        if($response['status'] == "200") {
-            $a_records = $response['body']->data; 
-            return $a_records; 
-        } else {
-            return false; 
-        }
+    $response = $resty->get("$id", "", $headers);
+    if ($response['status'] == "200") {
+        $a_records = $response['body']->data;
+        return $a_records;
+    } else {
+        return false;
+    }
 }
 
 /**
@@ -135,14 +124,15 @@ function getOneARecord($resty, $headers, $id) {
  * @param type $headers
  * @param type $zone
  */
-function getARecords($resty, $headers, $zone) {
-	$response = $resty->get("/REST/ARecord/$zone/$zone", "", $headers); 
-        if($response['status'] == "200") {
-            $a_records = $response['body']->data; 
-            return $a_records; 
-        }
+function getARecords($resty, $headers, $zone, $fqdn) {
+    $response = $resty->get("/REST/ARecord/$zone/$fqdn", "", $headers);
+    if ($response['status'] == "200") {
+        $a_records = $response['body']->data;
+        return $a_records;
+    } else {
+        return false;
+    }
 }
-
 
 /**
  * Gets all the zones we have at Dynect. Since we have several thousand, this takes a while
@@ -154,26 +144,45 @@ function getARecords($resty, $headers, $zone) {
  * @return type
  */
 function getAllZones($resty, $headers) {
-	$zone_response = $resty->get('/REST/Zone/', "", $headers); 
+    $zone_response = $resty->get('/REST/Zone/', "", $headers);
 
-	// because we have so many zones.. this sends us a job id.. 
-        // which takes about 10 seconds to run
+    // because we have so many zones.. this sends us a job id.. 
+    // which takes about 10 seconds to run
 
-	$job_url = $zone_response['body'];
-        
-	echo "Waiting for Dynect to compile the list... wait 10 seconds\n"; 
-	sleep(10); 
+    $job_url = $zone_response['body'];
 
-	// now get the list of zones from the last job. 
+    echo "Waiting for Dynect to compile the list... wait 10 seconds\n";
+    sleep(10);
 
-	$job_response = $resty->get($job_url, "", $headers); 
+    // now get the list of zones from the last job. 
 
-
-	$zone_list = $job_response['body']; 
-
-	$zones = $zone_list->data; 
-	
-	return $zones; 
+    $job_response = $resty->get($job_url, "", $headers);
 
 
+    $zone_list = $job_response['body'];
+
+    $zones = $zone_list->data;
+
+    return $zones;
+}
+
+function getNodes($resty, $headers, $zone) {
+    $response = $resty->get("/REST/NodeList/$zone", "", $headers);
+    if ($response['status'] == "200") {
+        return $response['body']->data;
+    }
+}
+
+/**
+ * This should publish any changes we've made while the script is running. 
+ * 
+ * @param type $resty
+ * @param type $headers
+ * @param type $zone
+ */
+function publish($resty, $headers, $zone) {
+    $encoded = json_encode(array('publish' => true));
+    $response = $resty->put("/REST/Zone/$zone/", $encoded, $headers);
+
+    return true;
 }
